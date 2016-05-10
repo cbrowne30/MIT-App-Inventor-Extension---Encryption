@@ -1,0 +1,146 @@
+package com.google.appinventor.components.runtime;
+
+import com.google.appinventor.components.annotations.DesignerComponent;
+import com.google.appinventor.components.annotations.DesignerProperty;
+import com.google.appinventor.components.annotations.SimpleFunction;
+import com.google.appinventor.components.annotations.SimpleObject;
+import com.google.appinventor.components.annotations.SimpleProperty;
+import com.google.appinventor.components.common.ComponentCategory;
+import com.google.appinventor.components.common.PropertyTypeConstants;
+import com.google.appinventor.components.common.YaVersion;
+import com.google.appinventor.components.runtime.errors.YailRuntimeError;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Enumeration;
+import java.util.List;
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.CipherOutputStream;
+import javax.security.auth.x500.X500Principal;
+import java.lang.NumberFormatException;
+import java.util.ArrayList;
+
+
+
+@DesignerComponent(version = YaVersion.LABEL_COMPONENT_VERSION,
+  description = "This provides 256-bit encryption and decryption",
+  category = ComponentCategory.EXTERNAL,
+  nonVisible = true,
+  iconName = "images/externalComponent.png")
+@SimpleObject(external=true)
+public class AESEncrypt extends AndroidNonvisibleComponent {
+  private String un = "";
+  private String pw = "";
+  private String alias = "";
+  KeyStore keyStore;
+  
+  public AESEncrypt(ComponentContainer container) {
+    super(container.$form());
+  }
+
+  @DesignerProperty(editorType = PropertyTypeConstants.PROPERTY_TYPE_STRING)
+  @SimpleProperty(description = "The user's username")
+  public void Username(String un) {
+    this.un = un;
+  }
+
+  @SimpleProperty
+  public String Username() {
+    return un;
+  }
+
+  @DesignerProperty(editorType = PropertyTypeConstants.PROPERTY_TYPE_STRING)
+  @SimpleProperty(description = "The user's password")
+  public void Password(String pw) {
+    this.pw = pw;
+  }
+
+  @SimpleProperty
+  public String Password() {
+    return pw;
+  }
+
+  @SimpleFunction(description = "Encrypt password with given username")
+  public String Register() {
+  	 try {
+            keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+        }
+        catch(Exception e) {}
+        refreshKeys();
+        try {
+            // Create new key if needed
+            if (!keyStore.containsAlias(un)) {
+                Calendar start = Calendar.getInstance();
+                Calendar end = Calendar.getInstance();
+                end.add(Calendar.YEAR, 1);
+                KeyPairGeneratorSpec spec = new KeyPairGeneratorSpec.Builder(this)
+                        .setAlias(alias)
+                        .setSubject(new X500Principal("CN=Sample Name, O=Android Authority"))
+                        .setSerialNumber(BigInteger.ONE)
+                        .setStartDate(start.getTime())
+                        .setEndDate(end.getTime())
+                        .build();
+                KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore");
+                generator.initialize(spec);
+
+                KeyPair keyPair = generator.generateKeyPair();
+            } else {
+            	Context context = getApplicationContext();
+            	CharSequence text = "Username already exists please pick another one";
+            	int duration = Toast.LENGTH_SHORT;
+            	Toast toast = Toast.makeText(context, text, duration);
+            	toast.show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "Exception " + e.getMessage() + " occured", Toast.LENGTH_LONG).show();
+            Log.e(TAG, Log.getStackTraceString(e));
+        }
+        encryptString(un);
+  }
+    private void refreshKeys() {
+        keyAliases = new ArrayList<>();
+        try {
+            Enumeration<String> aliases = keyStore.aliases();
+            while (aliases.hasMoreElements()) {
+                keyAliases.add(aliases.nextElement());
+            }
+        }
+        catch(Exception e) {}
+
+        if(listAdapter != null)
+            listAdapter.notifyDataSetChanged();
+    }
+    public void encryptString(String un) {
+        try {
+            KeyStore.PrivateKeyEntry privateKeyEntry = (KeyStore.PrivateKeyEntry)keyStore.getEntry(un, null);
+            RSAPublicKey publicKey = (RSAPublicKey) privateKeyEntry.getCertificate().getPublicKey();
+
+            Cipher inCipher = Cipher.getInstance("RSA/ECB/PKCS1Padding", "AndroidOpenSSL");
+            inCipher.init(Cipher.ENCRYPT_MODE, publicKey);
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            CipherOutputStream cipherOutputStream = new CipherOutputStream(
+                    outputStream, inCipher);
+            cipherOutputStream.write(pw.getBytes("UTF-8"));
+            cipherOutputStream.close();
+
+            byte [] vals = outputStream.toByteArray();
+            StringBuilder result = new StringBuilder();
+            result.setText(Base64.encodeToString(vals, Base64.DEFAULT));
+            return result.toString();
+        } catch (Exception e) {
+            Toast.makeText(this, "Exception " + e.getMessage() + " occured", Toast.LENGTH_LONG).show();
+            Log.e(TAG, Log.getStackTraceString(e));
+        }
+    }
+}
